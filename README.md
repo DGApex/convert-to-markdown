@@ -11,8 +11,9 @@ it to the tool that measurably handles that format best.
 | Input | Engine | Why |
 |---|---|---|
 | `.pdf` | **[pdf-inspector](https://github.com/firecrawl/pdf-inspector)** | Layout-aware: headings, multi-column, tables. ~20× faster |
+| doc, docx, ppt, pptx, xls, xlsx, odt, ods, odp, rtf, csv | **[anydoc](https://github.com/firecrawl/anydoc)** | Beats MarkItDown on every one of these, at 4.7 ms median vs 134.8 |
 | `http(s)://` | **[Firecrawl CLI](https://github.com/firecrawl/cli)** | Renders SPAs and strips nav/footer boilerplate |
-| docx, pptx, xlsx, epub, msg, csv, json, zip, audio, images | **[MarkItDown](https://github.com/microsoft/markitdown)** | The only one covering this long tail |
+| epub, msg, zip, images, audio, html, json, xml, ipynb | **[MarkItDown](https://github.com/microsoft/markitdown)** | The long tail anydoc does not cover, plus epub, where MarkItDown wins |
 | Scanned PDF | → **[super-ocr](https://github.com/DGApex/super-ocr)** | pdf-inspector detects it but does no OCR |
 
 ## Credits — this is a router, not an engine
@@ -20,10 +21,38 @@ it to the tool that measurably handles that format best.
 | Tool | Licence |
 |---|---|
 | **[firecrawl/pdf-inspector](https://github.com/firecrawl/pdf-inspector)** | MIT |
+| **[firecrawl/anydoc](https://github.com/firecrawl/anydoc)** | MIT |
 | **[microsoft/markitdown](https://github.com/microsoft/markitdown)** | MIT |
 | **[firecrawl/cli](https://github.com/firecrawl/cli)** | MIT |
 | **[PyMuPDF](https://github.com/pymupdf/PyMuPDF)** | AGPL-3.0 |
 | **[astral-sh/uv](https://github.com/astral-sh/uv)** | Apache-2.0/MIT |
+
+## Why anydoc took the office formats
+
+Firecrawl benchmarked anydoc blind against six alternatives, using Claude Sonnet 5 as judge against
+LibreOffice-rendered ground truth, with every pair judged twice with positions swapped to cancel
+position bias, for 479 verdicts:
+
+| tool | formats | median ms | score |
+|---|---|---|---|
+| **anydoc** | **14/14** | **4.7** | **80** |
+| unstructured | 8/14 | 572.9 | 65 |
+| markitdown | 6/14 | 134.8 | 65 |
+| pandoc | 5/14 | 102.1 | 57 |
+| docling | 4/14 | 513.6 | 57 |
+| libreoffice | 12/14 | 1129.5 | 40 |
+
+Per format, anydoc wins everywhere except `.epub` (74 against MarkItDown's 77): docx 86 vs 72,
+pptx 76 vs 59, xlsx 70 vs 55, xls 77 vs 64. So epub stayed on MarkItDown and the rest moved.
+
+Being pure Rust turns out to matter beyond speed. On the machine this was developed on,
+MarkItDown's `.xlsx` path fails outright because Windows Application Control blocks a pandas DLL.
+anydoc has no compiled Python dependencies and converts the same file without complaint.
+
+**PDFs deliberately stay on pdf-inspector** even though anydoc embeds it. Verified on a 41-page
+PDF: the two return byte-identical Markdown, the same 38,723 characters. Calling the library
+directly is what exposes `pdf_type`, `page_count` and `pages_needing_ocr`, which this router needs
+in order to tell you a document is a scan and belongs in super-ocr.
 
 ## Why MarkItDown was taken off PDFs
 
@@ -81,6 +110,7 @@ uv run scripts/convert.py <file|folder|url ...> [flags]
 | `--out-dir DIR` | destination (default `converted`) |
 | `--recursive` | descend into subfolders |
 | `--pdf-engine pdf-inspector\|markitdown\|both` | `both` writes both results for comparison |
+| `--office-engine anydoc\|markitdown\|both` | engine for Word/PowerPoint/Excel/ODF/RTF/CSV (default anydoc) |
 | `--url-engine auto\|firecrawl\|markitdown` | `auto` = Firecrawl when installed **and** authenticated |
 | `--check-tools` | report engine availability and exit. **Run this before a batch of URLs** |
 | `--overwrite`, `--no-front-matter`, `--enable-plugins` | as expected |

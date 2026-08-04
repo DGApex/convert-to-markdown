@@ -12,9 +12,25 @@ Converts heterogeneous inputs to Markdown. **There is no longer a single engine*
 | Input | Engine | Why |
 |---|---|---|
 | `.pdf` | **[pdf-inspector](https://github.com/firecrawl/pdf-inspector)** (Rust, MIT) | Layout-aware: headings, multi-column, tables. ~20× faster |
+| doc, docx, ppt, pptx, xls, xlsx, odt, ods, odp, rtf, csv | **[anydoc](https://github.com/firecrawl/anydoc)** (Rust, MIT) | Beats MarkItDown on every one of these, at 4.7 ms median vs 134.8 |
 | `http(s)://` | **Firecrawl CLI** (`scrape --only-main-content`) | Renders SPAs and strips nav/footer. Consumes credits |
-| docx, pptx, xlsx, epub, msg, csv, json, zip, audio, images | **[MarkItDown](https://github.com/microsoft/markitdown)** | The only one covering this long tail |
+| epub, msg, zip, images, audio, html, json, xml, ipynb | **[MarkItDown](https://github.com/microsoft/markitdown)** | The long tail anydoc does not cover, plus epub, where MarkItDown wins |
 | Scanned PDF | → **`super-ocr`** skill | pdf-inspector detects it but does no OCR |
+
+**Why anydoc took the office formats (2026-08-04).** Firecrawl's own blind benchmark (Claude
+Sonnet 5 as judge against LibreOffice-rendered ground truth, positions swapped to cancel bias,
+479 verdicts) scores anydoc 80 overall on 14/14 formats against MarkItDown's 65 on 6/14, and per
+format it wins everywhere except `.epub` (74 vs 77): docx 86 vs 72, pptx 76 vs 59, xlsx 70 vs 55,
+xls 77 vs 64. So epub stays on MarkItDown and everything else moved.
+
+**PDFs deliberately stay on pdf-inspector** even though anydoc embeds it. Verified on a 41-page
+PDF: the two return **byte-identical Markdown**, same 38,723 characters. Calling the library
+directly is what exposes `pdf_type`, `page_count` and `pages_needing_ocr`, which this router needs
+in order to tell you a document is a scan and belongs in `super-ocr`.
+
+> anydoc inherits pdf-inspector's accent bug exactly (measured: 121 mojibake characters plus 49
+> accent-deleted words on the same document, `has_encoding_issues` reporting `false`). The repair
+> described below therefore matters just as much to anydoc users.
 
 **Self-contained**: the router lives at `scripts/convert.py`, next to this file, so the
 `convert-to-markdown/` folder can be copied into another project and still work.
@@ -64,6 +80,10 @@ When this skill is invoked:
 - `--out-dir=<dir>` (default `converted`) — destination for the `.md` files.
 - `--pdf-engine=pdf-inspector|markitdown|both` (default `pdf-inspector`) — `both` writes the two
   results (`<name>.md` and `<name>-markitdown.md`) for eyeball comparison.
+- `--office-engine=anydoc|markitdown|both` (default `anydoc`) — same idea for Office formats. A
+  failure in the comparison run never discards the primary result; it prints a warning and keeps
+  going. (That is not hypothetical: on the test machine MarkItDown's `.xlsx` path fails because
+  Windows Application Control blocks a pandas DLL, while anydoc, being pure Rust, is unaffected.)
 - `--url-engine=auto|firecrawl|markitdown` (default `auto` → firecrawl if it is on PATH).
 - `--recursive`, `--overwrite`, `--no-front-matter`, `--enable-plugins`.
 

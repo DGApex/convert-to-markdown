@@ -2,6 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #   "pdf-inspector>=0.2.6",
+#   "firecrawl-anydoc",
 #   "markitdown[docx,pptx,xlsx,xls,outlook,pdf,audio-transcription,youtube-transcription]>=0.1.6",
 #   "pymupdf>=1.27",
 # ]
@@ -59,16 +60,34 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
-# Formats MarkItDown covers and nobody else in this router does.
+# Office formats go to anydoc (firecrawl/anydoc): pure Rust, and on Firecrawl's own blind
+# benchmark it beats MarkItDown on every one of these — docx 86 vs 72, pptx 76 vs 59,
+# xlsx 70 vs 55, xls 77 vs 64 — at 4.7 ms median against 134.8 ms.
+ANYDOC_EXT = {
+    ".doc", ".docx", ".docm",
+    ".ppt", ".pptx", ".pptm", ".ppsx", ".ppsm", ".pps", ".pot",
+    ".xls", ".xlsx", ".xlsm", ".xlsb",
+    ".odt", ".ods", ".odp",
+    ".rtf", ".csv",
+}
+
+# Formats MarkItDown covers and anydoc does not: audio transcription, images, archives,
+# Outlook mail, notebooks and web/data text. Plus .epub, which is the one format where
+# MarkItDown measurably wins (77 vs 74 on the same benchmark), so it keeps it.
 MARKITDOWN_EXT = {
-    ".docx", ".pptx", ".xlsx", ".xls", ".epub", ".msg", ".ipynb",
-    ".html", ".htm", ".csv", ".json", ".xml", ".rss", ".atom", ".txt", ".md",
+    ".epub", ".msg", ".ipynb",
+    ".html", ".htm", ".json", ".xml", ".rss", ".atom", ".txt", ".md",
     ".zip",
     ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
     ".mp3", ".wav", ".m4a", ".flac", ".ogg",
 }
+
+# PDFs stay on pdf-inspector rather than anydoc even though anydoc embeds it and returns
+# byte-identical Markdown (verified on a 41-page PDF: same 38,723 chars). Calling the library
+# directly is what exposes pdf_type, page_count and pages_needing_ocr, which this router needs
+# to tell you a document is a scan and belongs in super-ocr.
 PDF_EXT = {".pdf"}
-SUPPORTED_EXT = MARKITDOWN_EXT | PDF_EXT
+SUPPORTED_EXT = ANYDOC_EXT | MARKITDOWN_EXT | PDF_EXT
 
 
 def _is_url(value: str) -> bool:
@@ -100,8 +119,17 @@ def _unique_path(out_dir: Path, stem: str, overwrite: bool) -> Path:
         i += 1
 
 
+def _kind_for(suffix: str) -> str:
+    suffix = suffix.lower()
+    if suffix in PDF_EXT:
+        return "pdf"
+    if suffix in ANYDOC_EXT:
+        return "office"
+    return "file"
+
+
 def _collect_inputs(raw_inputs: list[str], recursive: bool) -> list[tuple[str, str]]:
-    """Return [(kind, value)] where kind is 'url', 'pdf', 'file' or 'missing'."""
+    """Return [(kind, value)] where kind is 'url', 'pdf', 'office', 'file' or 'missing'."""
     jobs: list[tuple[str, str]] = []
     for item in raw_inputs:
         if _is_url(item):
@@ -112,11 +140,9 @@ def _collect_inputs(raw_inputs: list[str], recursive: bool) -> list[tuple[str, s
             globber = path.rglob("*") if recursive else path.glob("*")
             for child in sorted(globber):
                 if child.is_file() and child.suffix.lower() in SUPPORTED_EXT:
-                    kind = "pdf" if child.suffix.lower() in PDF_EXT else "file"
-                    jobs.append((kind, str(child)))
+                    jobs.append((_kind_for(child.suffix), str(child)))
         elif path.is_file():
-            kind = "pdf" if path.suffix.lower() in PDF_EXT else "file"
-            jobs.append((kind, str(path)))
+            jobs.append((_kind_for(path.suffix), str(path)))
         else:
             jobs.append(("missing", item))
     return jobs
@@ -265,6 +291,21 @@ def _convert_pdf_inspector(path: str) -> dict:
     }
 
 
+def _convert_anydoc(path: str) -> dict:
+    """Office formats through firecrawl/anydoc (Rust, MIT, no external calls)."""
+    import anydoc
+
+    markdown = anydoc.to_markdown(path)
+    if isinstance(markdown, (bytes, bytearray)):
+        markdown = markdown.decode("utf-8", "replace")
+    return {
+        "engine": "anydoc",
+        "markdown": markdown,
+        "title": None,
+        "table_health": _table_health(markdown),
+    }
+
+
 def _convert_markitdown(value: str, enable_plugins: bool = False) -> dict:
     from markitdown import MarkItDown
 
@@ -374,6 +415,11 @@ def main() -> int:
         help="Engine for PDFs (default: pdf-inspector). 'both' writes both for comparison.",
     )
     parser.add_argument(
+        "--office-engine", choices=["anydoc", "markitdown", "both"], default="anydoc",
+        help="Engine for Word/PowerPoint/Excel/OpenDocument/RTF/CSV (default: anydoc). "
+             "'both' writes both results for comparison.",
+    )
+    parser.add_argument(
         "--url-engine", choices=["auto", "firecrawl", "markitdown"], default="auto",
         help="Engine for URLs (default: auto → firecrawl if installed, else markitdown).",
     )
@@ -420,6 +466,23 @@ def main() -> int:
             print("  ~ Firecrawl CLI is installed but NOT authenticated — URLs fall back to "
                   "MarkItDown.", file=sys.stderr)
             print("    authenticate with: firecrawl auth --api-key fc-…", file=sys.stderr)
+
+    def write_comparison(source: str, stem: str, payload_fn, suffix: str) -> None:
+        """Second-opinion conversion for the 'both' modes.
+
+        Deliberately swallows its own failure: the comparison is a convenience, and letting it
+        raise would discard the primary result that was already written to disk. Observed with
+        an .xlsx whose MarkItDown path was blocked by a machine policy — the anydoc output
+        existed but never reached the JSON report.
+        """
+        try:
+            alt = write_out(source, stem, payload_fn(), suffix)
+        except Exception as exc:  # noqa: BLE001
+            print(f"    ~ comparison run failed ({type(exc).__name__}); primary result kept",
+                  file=sys.stderr)
+            return
+        results.append(alt)
+        print(f"    + {alt['engine']} → {alt['output']} ({alt['chars']} chars)")
 
     def write_out(source: str, stem: str, payload: dict, suffix: str = "") -> dict:
         markdown = payload.pop("markdown", "")
@@ -485,9 +548,24 @@ def main() -> int:
                     if warnings:
                         record["warnings"] = warnings
                     if args.pdf_engine == "both":
-                        alt = write_out(value, stem, _convert_markitdown(value, args.enable_plugins), "-markitdown")
-                        results.append(alt)
-                        print(f"    + markitdown → {alt['output']} ({alt['chars']} chars)")
+                        write_comparison(
+                            value, stem,
+                            lambda: _convert_markitdown(value, args.enable_plugins),
+                            "-markitdown",
+                        )
+            elif kind == "office":
+                stem = _safe_slug(Path(value).stem)
+                if args.office_engine == "markitdown":
+                    record = write_out(value, stem, _convert_markitdown(value, args.enable_plugins))
+                else:
+                    record = write_out(value, stem, _convert_anydoc(value))
+                    if args.office_engine == "both":
+                        write_comparison(
+                            value, stem,
+                            lambda: _convert_markitdown(value, args.enable_plugins),
+                            "-markitdown",
+                        )
+
             else:
                 stem = _safe_slug(Path(value).stem)
                 record = write_out(value, stem, _convert_markitdown(value, args.enable_plugins))
