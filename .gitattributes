@@ -1,0 +1,16 @@
+# Normalise every text file to LF in the repository and on checkout.
+#
+# This is not cosmetic: setup_unlimited_ocr.sh runs inside WSL/Linux, and a CRLF
+# checkout makes bash fail with the notoriously unhelpful "\r: command not found".
+# Git on Windows defaults to core.autocrlf=true, so without this the file would be
+# committed or checked out with CRLF depending on the contributor's machine.
+* text=auto eol=lf
+
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+
+# Never touch binaries, should any be added later.
+*.png binary
+*.jpg binary
+*.pdf binary

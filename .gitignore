@@ -1,0 +1,18 @@
+# Default output folder of the skill (--out-dir), including exported figures
+converted/
+
+# Written by the Firecrawl CLI when used by hand
+.firecrawl/
+
+# Defensive: this skill creates NO environment. Its dependencies live in each script's
+# PEP 723 header and are resolved by `uv run` into uv's global cache, outside the repo.
+# These entries are here in case someone makes a venv by hand or runs with python directly.
+.venv/
+__pycache__/
+*.py[cod]
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
