@@ -13,7 +13,7 @@ despacha a la herramienta que mejor maneja ese formato, medido.
 | `.pdf` | **[pdf-inspector](https://github.com/firecrawl/pdf-inspector)** | Consciente del layout: títulos, multicolumna, tablas. ~20× más rápido |
 | `http(s)://` | **[Firecrawl CLI](https://github.com/firecrawl/cli)** | Renderiza SPAs y quita navegación y pies de página |
 | docx, pptx, xlsx, epub, msg, csv, json, zip, audio, imágenes | **[MarkItDown](https://github.com/microsoft/markitdown)** | El único que cubre esta cola larga |
-| PDF escaneado | → **[super-ocr](../super-ocr)** | pdf-inspector lo detecta pero no hace OCR |
+| PDF escaneado | → **[super-ocr](https://github.com/DGApex/super-ocr)** | pdf-inspector lo detecta pero no hace OCR |
 
 ## Créditos — esto es un enrutador, no un motor
 
@@ -59,13 +59,13 @@ cuando la extracción sale hueca, en vez de devolverte una grilla vacía en sile
 ### Como skill de Claude Code
 
 ```bash
-git clone https://github.com/<tu-usuario>/convert-to-markdown .claude/skills/convert-to-markdown
+git clone https://github.com/DGApex/convert-to-markdown .claude/skills/convert-to-markdown
 ```
 
 ### Como CLI a secas
 
 ```bash
-git clone https://github.com/<tu-usuario>/convert-to-markdown
+git clone https://github.com/DGApex/convert-to-markdown
 uv run convert-to-markdown/scripts/convert.py informe.pdf
 ```
 
@@ -147,7 +147,7 @@ fuentes correctamente, así que se usa como referencia, y el conteo se reporta c
 Las sustituciones solo ocurren cuando la referencia ofrece un único candidato inequívoco. Los que
 quedan son palabras cuyo acento cae en la primera letra (`Áreas` vs `áreas`), donde el acento se
 lleva consigo la pista de mayúscula. La referencia aquí es **el documento entero**, más ambigua que
-la referencia por página que usa [super-ocr](../super-ocr) — por eso el mismo archivo deja 7
+la referencia por página que usa [super-ocr](https://github.com/DGApex/super-ocr) — por eso el mismo archivo deja 7
 residuales aquí y 1 allá.
 
 **Si conviertes PDF que no están en inglés, esto es lo más valioso de este repositorio.**
@@ -166,7 +166,7 @@ residuales aquí y 1 allá.
   existe como pre-release, que `uv` rechaza por defecto (pip no) — falla toda la resolución. La
   cabecera PEP 723 fija exactamente los extras que este enrutador delega.
 - **Los PDF escaneados se detectan, no se convierten.** El enrutador reporta `needs_ocr` y te manda a
-  [super-ocr](../super-ocr).
+  [super-ocr](https://github.com/DGApex/super-ocr).
 
 ## Licencia
 

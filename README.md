@@ -13,7 +13,7 @@ it to the tool that measurably handles that format best.
 | `.pdf` | **[pdf-inspector](https://github.com/firecrawl/pdf-inspector)** | Layout-aware: headings, multi-column, tables. ~20× faster |
 | `http(s)://` | **[Firecrawl CLI](https://github.com/firecrawl/cli)** | Renders SPAs and strips nav/footer boilerplate |
 | docx, pptx, xlsx, epub, msg, csv, json, zip, audio, images | **[MarkItDown](https://github.com/microsoft/markitdown)** | The only one covering this long tail |
-| Scanned PDF | → **[super-ocr](../super-ocr)** | pdf-inspector detects it but does no OCR |
+| Scanned PDF | → **[super-ocr](https://github.com/DGApex/super-ocr)** | pdf-inspector detects it but does no OCR |
 
 ## Credits — this is a router, not an engine
 
@@ -58,13 +58,13 @@ hollow instead of silently handing back an empty grid.
 ### As a Claude Code skill
 
 ```bash
-git clone https://github.com/<you>/convert-to-markdown .claude/skills/convert-to-markdown
+git clone https://github.com/DGApex/convert-to-markdown .claude/skills/convert-to-markdown
 ```
 
 ### As a plain CLI
 
 ```bash
-git clone https://github.com/<you>/convert-to-markdown
+git clone https://github.com/DGApex/convert-to-markdown
 uv run convert-to-markdown/scripts/convert.py report.pdf
 ```
 
@@ -146,7 +146,7 @@ document: **156 → 7**.
 Substitutions happen only when the reference offers a single unambiguous candidate. The leftovers
 are words whose accent falls on the first letter (`Áreas` vs `áreas`), where the accent takes the
 capitalisation clue with it. The reference here is the **whole document**, which is more ambiguous
-than the per-page reference [super-ocr](../super-ocr) uses — that is why the same file leaves 7
+than the per-page reference [super-ocr](https://github.com/DGApex/super-ocr) uses — that is why the same file leaves 7
 residuals here and 1 there.
 
 **If you convert non-English PDFs, this is the single most valuable thing in this repo.**
@@ -163,7 +163,7 @@ residuals here and 1 there.
   only exists as a pre-release, which `uv` rejects by default (pip does not) — the whole resolution
   fails. The PEP 723 header pins exactly the extras this router delegates.
 - **Scanned PDFs are detected, not converted.** The router reports `needs_ocr` and points you at
-  [super-ocr](../super-ocr).
+  [super-ocr](https://github.com/DGApex/super-ocr).
 
 ## Licence
 
